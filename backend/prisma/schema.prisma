@@ -8,18 +8,23 @@ datasource db {
 }
 
 model User {
-  id              String    @id @default(uuid())
+  id              String       @id @default(uuid())
   name            String
-  email           String    @unique
-  phone_number    String    @unique
+  email           String       @unique
+  phone_number    String       @unique
   password        String
   role            user_role
-  isVerified      Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  devices         Device[]  @relation("UserDevices")
-  verifiedDevices Device[]  @relation("VerifiedDevices")
+  status          user_status  @default(PENDING)
+  isVerified      Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  devices         Device[]     @relation("UserDevices")
+  verifiedDevices Device[]     @relation("VerifiedDevices")
   parent          Parent?
+  student         Student?
+  teacher         Teacher?
   sessions        Session[]
+  actions         AdminActionLog[]
+  announcements   Announcement[]
 
   @@map("user")
 }
@@ -31,7 +36,7 @@ model Device {
   verifiedAt   DateTime?
   verifiedById String?
   user         User      @relation("UserDevices", fields: [userId], references: [id], onDelete: Cascade)
-  verifiedBy   User?     @relation("VerifiedDevices", fields: [verifiedById], references: [id])
+  verifiedBy   User?     @relation("VerifiedDevices", fields: [verifiedById], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([verifiedById])
@@ -53,14 +58,276 @@ model Session {
 }
 
 model Parent {
-  id     String @id @default(uuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String          @id @default(uuid())
+  userId   String          @unique
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  students ParentStudent[]
 
   @@map("parent")
 }
 
+model ParentStudent {
+  id        String  @id @default(uuid())
+  parentId  String
+  studentId String
+  parent    Parent  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([parentId, studentId])
+  @@index([studentId])
+  @@map("parent_student")
+}
+
+model Teacher {
+  id        String       @id @default(uuid())
+  userId    String       @unique
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classes   Class[]
+  exams     Exam[]
+  assignments Assignment[]
+
+  @@map("teacher")
+}
+
+model Student {
+  id              String          @id @default(uuid())
+  userId          String          @unique
+  classId         String?
+  admissionNumber String?         @unique
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class           Class?          @relation(fields: [classId], references: [id], onDelete: SetNull)
+  parents         ParentStudent[]
+  feeAccount      FeeAccount?
+  records         Result[]
+  attendance      Attendance[]
+  invoices        Invoice[]
+  transactions    Transaction[]
+
+  @@index([classId])
+  @@map("student")
+}
+
+model Class {
+  id           String         @id @default(uuid())
+  name         String
+  level        String?
+  academicYear String?
+  teacherId    String?
+  teacher      Teacher?       @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  students     Student[]
+  timetable    Timetable[]
+  attendance   Attendance[]
+  exams        Exam[]
+  assignments  Assignment[]
+  announcements Announcement[]
+
+  @@index([teacherId])
+  @@map("class")
+}
+
+model Timetable {
+  id        String   @id @default(uuid())
+  classId   String
+  day       String
+  startTime String
+  endTime   String
+  subject   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([classId])
+  @@map("timetable")
+}
+
+model Subject {
+  id          String       @id @default(uuid())
+  name        String
+  assignments Assignment[]
+
+  @@map("subject")
+}
+
+model Assignment {
+  id          String    @id @default(uuid())
+  title       String
+  description String?   @db.Text
+  dueDate     DateTime?
+  classId     String
+  subjectId   String?
+  teacherId   String
+  createdAt   DateTime  @default(now())
+  class       Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject     Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  teacher     Teacher   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([classId])
+  @@index([subjectId])
+  @@index([teacherId])
+  @@map("assignment")
+}
+
+model Attendance {
+  id        String            @id @default(uuid())
+  studentId String
+  classId   String
+  date      DateTime
+  status    attendance_status
+  student   Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class             @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classId, date])
+  @@index([classId])
+  @@map("attendance")
+}
+
+model Exam {
+  id        String   @id @default(uuid())
+  title     String
+  subject   String
+  classId   String
+  teacherId String
+  createdAt DateTime @default(now())
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  results   Result[]
+
+  @@index([classId])
+  @@index([teacherId])
+  @@map("exam")
+}
+
+model Result {
+  id        String   @id @default(uuid())
+  examId    String
+  studentId String
+  score     Float
+  grade     String?
+  createdAt DateTime @default(now())
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, studentId])
+  @@index([studentId])
+  @@map("result")
+}
+
+model FeeAccount {
+  id        String   @id @default(uuid())
+  studentId String   @unique
+  balance   Float    @default(0)
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("fee_account")
+}
+
+model Invoice {
+  id        String         @id @default(uuid())
+  studentId String
+  amount    Float
+  dueDate   DateTime?
+  status    invoice_status @default(PENDING)
+  createdAt DateTime       @default(now())
+  student   Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  payments  Payment[]
+
+  @@index([studentId])
+  @@map("invoice")
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  invoiceId String
+  amount    Float
+  method    String
+  createdAt DateTime @default(now())
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("payment")
+}
+
+model Transaction {
+  id        String             @id @default(uuid())
+  studentId String
+  type      transaction_type
+  amount    Float
+  status    transaction_status @default(PENDING)
+  createdAt DateTime           @default(now())
+  student   Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("transaction")
+}
+
+model Announcement {
+  id        String                @id @default(uuid())
+  title     String
+  body      String                @db.Text
+  audience  announcement_audience @default(ALL)
+  classId   String?
+  authorId  String
+  createdAt DateTime              @default(now())
+  class     Class?                @relation(fields: [classId], references: [id], onDelete: Cascade)
+  author    User                  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([classId])
+  @@index([authorId])
+  @@map("announcement")
+}
+
+model AdminActionLog {
+  id        String   @id @default(uuid())
+  adminId   String?
+  action    String
+  entity    String
+  entityId  String
+  createdAt DateTime @default(now())
+  admin     User?    @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([adminId])
+  @@map("admin_action_log")
+}
+
 enum user_role {
   ADMIN
+  TEACHER
+  STUDENT
   PARENT
+}
+
+enum user_status {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  REJECTED
+}
+
+enum attendance_status {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum invoice_status {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+enum transaction_type {
+  DEPOSIT
+  WITHDRAW
+}
+
+enum transaction_status {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum announcement_audience {
+  ALL
+  CLASS
+  TEACHERS
+  STUDENTS
+  PARENTS
 }

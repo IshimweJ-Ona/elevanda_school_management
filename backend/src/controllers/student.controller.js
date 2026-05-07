@@ -18,7 +18,12 @@ const getStudentDashboard = async (req, res) => {
                     }
                 },
                 feeAccount: true,
-                records: true,
+                records: {
+                    include: {
+                        exam: true
+                    },
+                    orderBy: { createdAt: "desc" }
+                },
                 attendance: {
                     orderBy: { date: "desc" },
                     take: 10
