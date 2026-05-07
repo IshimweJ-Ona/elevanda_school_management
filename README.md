@@ -2,6 +2,10 @@
 
 Version 2 is the admin, teacher, and student school operations system. It is frontend-separated from Version 1, but it intentionally uses the same database so Version 1 can continue handling the parent portal, parent registration, and parent approval workflow.
 
+## Demo youtube video
+[Watch the Elevanda School Management System demo](https://www.youtube.com/watch?v=m58axtMOSqw)
+
+
 ## Features
 
 - JWT authentication with stored sessions
@@ -57,7 +61,7 @@ Create `backend/.env`:
 DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/DATABASE"
 JWT_SECRET="replace-with-a-long-random-secret"
 PORT=8000
-CORS_ORIGINS="http://localhost:5173,http://localhost:3000"
+CORS_ORIGINS="http://localhost:5001,http://localhost:5173,http://localhost:3000"
 
 ADMIN_NAME="Administrator"
 ADMIN_EMAIL="admin@school.local"
@@ -86,33 +90,41 @@ VITE_API_BASE_URL="http://localhost:8000"
 ```
 
 ## Install
-In backend and frontend
+Install dependencies in both folders:
 
 ```bash
+cd backend
+npm install
+
+cd ../frontend
 npm install
 ```
 
 ## Database Setup
 
-Generate the Prisma client in backend folder:
+Run Prisma from the `backend/` folder.
 
 ```bash
-npx run prisma generate
+cd backend
+npm run prisma:generate
 ```
 
-Apply migrations to the shared database:
+Sync the Prisma schema to the local/shared MySQL database:
 
 ```bash
-npx run prisma migrate
+npm run prisma:push
 ```
 
-For local development only, you can use Prisma directly from `backend/`:
+This project currently uses `prisma db push` because the repository does not include a committed `prisma/migrations/` history yet. Do not run `migrate reset` on the shared Version 1 database unless you intentionally want to delete data.
+
+Equivalent direct Prisma commands:
 
 ```bash
-npx prisma migrate dev
+npx prisma generate
+npx prisma db push
 ```
 
-Do not reset the shared production database. Version 2 migrations are additive and should be deployed with `migrate deploy`.
+When a migration history is added later, use `npx prisma migrate deploy` during deployment.
 
 ## Seed Admin
 
@@ -123,6 +135,11 @@ npm run seed-admin
 ```
 
 The script creates an `ADMIN` user with `ACTIVE` status, a verified device record, and a securely hashed password. If a matching email or phone already exists, it exits without creating a duplicate.
+
+Default local admin credentials from the example `.env` are:
+
+- Email: `admin@school.local`
+- Password: `Admin123!`
 
 ## Run
 
@@ -147,7 +164,7 @@ npm run dev
 Default local URLs:
 
 - Backend: `http://localhost:8000`
-- Frontend: `http://localhost:5173`
+- Frontend: `http://localhost:5001`
 - API health: `http://localhost:8000/health`
 - API docs: `http://localhost:8000/api/docs`
 
@@ -190,9 +207,10 @@ Default local URLs:
 ## Troubleshooting
 
 - `Missing required environment variables`: set `DATABASE_URL` and `JWT_SECRET` in `backend/.env`.
+- `Unknown argument status` or missing Prisma models: from `backend/`, run `npm run prisma:push`, then `npm run prisma:generate`.
+- `Network error: Failed to fetch`: make sure the Version 2 backend is running on `http://localhost:8000`, `frontend/.env` has `VITE_API_BASE_URL=http://localhost:8000`, and `backend/.env` includes `http://localhost:5001` in `CORS_ORIGINS`.
 - Login says pending approval: the user is not `ACTIVE`, not verified, or has no verified device.
-- Frontend cannot reach backend: set `VITE_API_BASE_URL` and check `CORS_ORIGINS`.
-- Prisma client errors after schema changes: run `npm run prisma:generate`.
+- Email transporter verification fails: fix SMTP credentials or leave email disabled for local testing; login and seeding still work because email failures are logged as warnings.
 - Admin seed does nothing: an account already exists with the configured admin email or phone.
 
 ## Scalability Notes
