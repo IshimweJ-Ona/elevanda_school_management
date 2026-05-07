@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Plus, Edit, Trash2, X, Filter, AlertCircle } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, X, Filter, AlertCircle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
 
@@ -21,7 +21,9 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const itemsPerPage = 5;
 
@@ -66,6 +68,7 @@ export default function UserManagement() {
   );
 
   const handleOpenModal = (user?: User) => {
+    setSuccessMessage(null);
     if (user) {
       setEditingUser(user);
       setFormData({
@@ -85,6 +88,8 @@ export default function UserManagement() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingUser(null);
+    setSuccessMessage(null);
+    setIsSubmitting(false);
     setFormData({ name: '', email: '', phone_number: '', password: '', role: 'STUDENT' });
   };
 
@@ -95,6 +100,10 @@ export default function UserManagement() {
       toast.error('Password is required for new users');
       return;
     }
+
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSuccessMessage(null);
 
     try {
       if (editingUser) {
@@ -127,14 +136,23 @@ export default function UserManagement() {
         }
 
         if (newUser) {
-          setUsers([...users, newUser]);
-          toast.success(`${formData.role.charAt(0) + formData.role.slice(1).toLowerCase()} created — credentials sent by email.`);
+          const roleLabel = formData.role.charAt(0) + formData.role.slice(1).toLowerCase();
+          setUsers((currentUsers) => [...currentUsers, newUser]);
+          setSuccessMessage(`${roleLabel} created successfully`);
+          toast.success(`${roleLabel} created successfully`);
+          await loadUsers();
+          window.setTimeout(() => {
+            handleCloseModal();
+          }, 900);
+          return;
         }
       }
       handleCloseModal();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Operation failed';
       toast.error(message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -343,6 +361,17 @@ export default function UserManagement() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {successMessage && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-3 rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-success"
+                    >
+                      <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-sm font-medium">{successMessage}</span>
+                    </motion.div>
+                  )}
+
                   <div>
                     <label htmlFor="user-name" className="block text-card-foreground mb-2">Name</label>
                     <input
@@ -418,9 +447,10 @@ export default function UserManagement() {
                     </button>
                     <button
                       type="submit"
+                      disabled={isSubmitting || Boolean(successMessage)}
                       className="flex-1 px-4 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                     >
-                      {editingUser ? 'Update' : 'Create'}
+                      {isSubmitting ? 'Saving...' : editingUser ? 'Update' : 'Create'}
                     </button>
                   </div>
                 </form>

@@ -2,6 +2,8 @@
  * API Service - Centralized HTTP client for backend communication
  */
 
+import { authStorage } from './authStorage';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 interface ApiResponse<T = any> {
@@ -24,7 +26,7 @@ class ApiClient {
   }
 
   private getToken(): string | null {
-    return localStorage.getItem('authToken');
+    return authStorage.getToken();
   }
 
   private async request<T = any>(
@@ -57,8 +59,7 @@ class ApiClient {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (response.status === 401) {
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('userData');
+          authStorage.clear();
           window.dispatchEvent(new Event('auth:expired'));
         }
         const error: ApiError = new Error(
@@ -79,8 +80,17 @@ class ApiClient {
   }
 
   // Auth endpoints
-  async login(email: string, password: string) {
-    return this.request('POST', '/api/auth/login', { email, password }, false);
+  async login(identifier: string, password: string) {
+    const trimmedIdentifier = identifier.trim();
+    const isEmail = trimmedIdentifier.includes('@');
+    return this.request(
+      'POST',
+      '/api/auth/login',
+      isEmail
+        ? { email: trimmedIdentifier, password }
+        : { phone_number: trimmedIdentifier, password },
+      false
+    );
   }
 
   // Device endpoints
@@ -175,6 +185,19 @@ class ApiClient {
 
   async getDashboardStats() {
     return this.request('GET', '/api/admin/dashboard');
+  }
+
+  async getClasses() {
+    return this.request('GET', '/api/admin/classes');
+  }
+
+  async createClass(data: {
+    name: string;
+    level?: string;
+    academicYear?: string;
+    teacherId?: string;
+  }) {
+    return this.request('POST', '/api/admin/classes', data);
   }
 
   // Invoice/Payment endpoints

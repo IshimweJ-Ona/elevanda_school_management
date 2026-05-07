@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Toaster, toast } from 'sonner';
 import { LayoutDashboard, Users, School, BookOpen, Wallet, Smartphone, FileText, UserCircle, CalendarDays, Megaphone } from 'lucide-react';
 import { api } from '../services/api';
+import { authStorage } from '../services/authStorage';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -13,6 +14,7 @@ import DeviceVerification from './components/DeviceVerification';
 import AuditLogs from './components/AuditLogs';
 import Profile from './components/Profile';
 import PendingApproval from './components/PendingApproval';
+import StudentPages from './components/StudentPages';
 
 interface User {
   id: string;
@@ -30,22 +32,21 @@ export default function App() {
 
   // Check for existing token on mount
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    const userData = localStorage.getItem('userData');
+    authStorage.clearLegacyLocalStorage();
+    const token = authStorage.getToken();
+    const userData = authStorage.getUserData();
 
     if (token && userData) {
       try {
         const user = JSON.parse(userData);
         if (!['ADMIN', 'TEACHER', 'STUDENT'].includes(user.role)) {
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('userData');
+          authStorage.clear();
           return;
         }
         setCurrentUser(user);
         setIsAuthenticated(true);
       } catch {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('userData');
+        authStorage.clear();
       }
     }
   }, []);
@@ -62,7 +63,7 @@ export default function App() {
     return () => window.removeEventListener('auth:expired', handleExpiredSession);
   }, []);
 
-  const handleLogin = async (credentials: { email: string; password: string }) => {
+  const handleLogin = async (credentials: { email: string; password: string; expectedRole?: 'ADMIN' | 'TEACHER' | 'STUDENT' }) => {
     setIsLoading(true);
     try {
       const response = await api.login(credentials.email, credentials.password);
@@ -75,9 +76,11 @@ export default function App() {
         throw new Error('This Version 2 portal is only for admin, teacher, and student accounts.');
       }
 
-      // Store token and user data
-      localStorage.setItem('authToken', response.token);
-      localStorage.setItem('userData', JSON.stringify(response.user));
+      if (credentials.expectedRole && response.user.role !== credentials.expectedRole) {
+        throw new Error(`Please use the ${response.user.role.toLowerCase()} login option for this account.`);
+      }
+
+      authStorage.setSession(response.token, response.user);
 
       setCurrentUser(response.user);
       setIsAuthenticated(true);
@@ -87,7 +90,7 @@ export default function App() {
     } catch (error: any) {
       // Handle pending approval — show waiting screen instead of toast
       if (error?.code === 'PENDING_APPROVAL' || error?.data?.code === 'PENDING_APPROVAL') {
-        setPendingInfo({ name: credentials.email, email: credentials.email });
+        setPendingInfo({ name: credentials.email, email: credentials.email, role: credentials.expectedRole });
         return;
       }
       const message = error instanceof Error ? error.message : 'Login failed';
@@ -99,8 +102,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('userData');
+    authStorage.clear();
     setIsAuthenticated(false);
     setCurrentUser(null);
     setPendingInfo(null);
@@ -147,9 +149,9 @@ export default function App() {
       case 'users':
         return <UserManagement />;
       case 'classes':
-        return <ClassManagement />;
+        return <ClassManagement role={currentUser?.role} />;
       case 'academics':
-        return <Academics />;
+        return <Academics role={currentUser?.role} />;
       case 'finance':
         if (currentUser?.role !== 'ADMIN') return <Unauthorized />;
         return <Finance />;
@@ -162,8 +164,11 @@ export default function App() {
       case 'profile':
         return <Profile user={currentUser} onProfileUpdate={(updated) => setCurrentUser(prev => prev ? { ...prev, ...updated } : prev)} />;
       case 'attendance':
+        if (currentUser?.role !== 'STUDENT') return <Unauthorized />;
+        return <StudentPages view="attendance" />;
       case 'announcements':
-        return <Dashboard role={currentUser?.role} userId={currentUser?.id} />;
+        if (currentUser?.role !== 'STUDENT') return <Unauthorized />;
+        return <StudentPages view="announcements" />;
       default:
         return <NotFound onBack={() => setCurrentPage('dashboard')} />;
     }

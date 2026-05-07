@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { User, Lock, Phone, Mail, Save, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../services/api';
+import { authStorage } from '../../services/authStorage';
 
 interface ProfileUser {
   id: string;
@@ -71,11 +72,10 @@ export default function Profile({ user, onProfileUpdate }: ProfileProps) {
         phone_number: profileData.phone_number || undefined,
       });
 
-      // Update localStorage
-      const stored = localStorage.getItem('userData');
+      const stored = authStorage.getUserData();
       if (stored) {
         const parsed = JSON.parse(stored);
-        localStorage.setItem('userData', JSON.stringify({ ...parsed, ...res.user }));
+        authStorage.updateUserData({ ...parsed, ...res.user });
       }
 
       onProfileUpdate({ name: res.user.name, email: res.user.email });
